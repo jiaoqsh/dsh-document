@@ -1,7 +1,7 @@
 {
   "name": "@jiaoqsh/dsh-document",
   "version": "0.1.0",
-  "description": "DeepSeek Harness bundle: the convert_document tool turns Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, and PDF files into Markdown for the model",
+  "description": "DeepSeek Harness bundle: the read_document tool reads Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, and PDF files as Markdown for the model",
   "keywords": [
     "deepseek-harness",
     "dsh",

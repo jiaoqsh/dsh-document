@@ -1,15 +1,15 @@
 /**
- * DeepSeek Harness plugin: the `convert_document` tool. Word, PowerPoint,
- * Excel, OpenDocument, RTF, EPUB, CSV, and PDF files become line-numbered
- * Markdown for the model, read through the `ctx.fs` seam and converted
- * locally by `@firecrawl/anydoc`.
+ * DeepSeek Harness plugin: the `read_document` tool. Word, PowerPoint,
+ * Excel, OpenDocument, RTF, EPUB, CSV, and PDF files are read through the
+ * `ctx.fs` seam, converted locally by `@firecrawl/anydoc`, and returned to
+ * the model as line-numbered Markdown.
  * @module @jiaoqsh/dsh-document
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { anydocConverter } from './converter.ts'
-import { applyConvertDocumentTool } from './tool.ts'
+import { applyReadDocumentTool } from './tool.ts'
 
 export {
   DOCUMENT_EXTENSIONS,
@@ -18,7 +18,7 @@ export {
   anydocConverter,
 } from './converter.ts'
 export type { ConversionErrorCode, DocumentConverter, DocumentFormat } from './converter.ts'
-export type { ConvertDocumentCaps, ConvertDocumentOutcome } from './tool.ts'
+export type { ReadDocumentCaps, ReadDocumentOutcome } from './tool.ts'
 
 export const name = 'document-tools'
 export const inject = ['tools', 'fs', 'systemPrompt']
@@ -63,7 +63,7 @@ function assertPositiveInteger(name: string, value: number): void {
 }
 
 /**
- * Register `convert_document` over the anydoc engine.
+ * Register `read_document` over the anydoc engine.
  * @param ctx - context carrying the tool registry, filesystem seam, and system-prompt registry.
  * @param rawConfig - schema-validated bounds after defaulting.
  */
@@ -73,7 +73,7 @@ export function apply(ctx: Context, rawConfig: Config): void {
   assertPositiveInteger('readLimit', config.readLimit)
   assertPositiveInteger('maxLineLength', config.maxLineLength)
   assertPositiveInteger('maxOutputBytes', config.maxOutputBytes)
-  applyConvertDocumentTool(ctx, anydocConverter(), {
+  applyReadDocumentTool(ctx, anydocConverter(), {
     maxInputBytes: config.maxInputBytes,
     readLimit: config.readLimit,
     maxLineLength: config.maxLineLength,

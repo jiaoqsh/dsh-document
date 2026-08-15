@@ -17,7 +17,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as DocumentTools from '../src/index.ts'
 import { anydocConverter } from '../src/converter.ts'
-import { formatConvertOutput, parseConvertArgs } from '../src/tool.ts'
+import { formatReadOutput, parseReadArgs } from '../src/tool.ts'
 import { splitLines, windowLines } from '../src/window.ts'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
@@ -52,7 +52,7 @@ function call(ctx: Context, args: unknown, agentCwd?: string) {
   return ctx.tools.execute({
     signal: new AbortController().signal,
     callId: CallId(`call-${++calls}`),
-    name: 'convert_document',
+    name: 'read_document',
     arguments: args,
     ...agentCwd === undefined ? {} : { agent: { session: { header: { cwd: agentCwd } } } as never },
   })
@@ -116,11 +116,11 @@ describe('anydoc converter', () => {
   })
 })
 
-describe('convert_document plugin', () => {
+describe('read_document plugin', () => {
   it('registers the tool schema and its prompt guidance', async () => {
     const { ctx } = await mount(workspace())
-    expect(ctx.tools.schemas().map(s => s.name)).toContain('convert_document')
-    expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain('Use the convert_document tool')
+    expect(ctx.tools.schemas().map(s => s.name)).toContain('read_document')
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain('Use the read_document tool')
   })
 
   it.each(['sample.docx', 'sample.rtf'])('converts %s to numbered Markdown lines', async (file) => {
@@ -216,25 +216,25 @@ describe('convert_document plugin', () => {
 
   it('unregisters the tool and prompt section when disposed (HMR safety)', async () => {
     const { ctx, fiber } = await mount(workspace())
-    expect(ctx.tools.get('convert_document')).toBeDefined()
+    expect(ctx.tools.get('read_document')).toBeDefined()
     await fiber.dispose()
-    expect(ctx.tools.get('convert_document')).toBeUndefined()
-    expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain('convert_document')
+    expect(ctx.tools.get('read_document')).toBeUndefined()
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain('read_document')
   })
 })
 
 describe('pure helpers', () => {
-  it('parseConvertArgs defaults and validates', () => {
-    expect(parseConvertArgs({ file_path: 'a.pdf' }, 2000)).toEqual({ filePath: 'a.pdf', offset: 1, limit: 2000 })
-    expect(() => parseConvertArgs({ file_path: '  ' }, 2000)).toThrow('file_path must be a non-empty string')
-    expect(() => parseConvertArgs({ file_path: 'a.pdf', limit: 2001 }, 2000)).toThrow('limit must be less than or equal to 2000')
+  it('parseReadArgs defaults and validates', () => {
+    expect(parseReadArgs({ file_path: 'a.pdf' }, 2000)).toEqual({ filePath: 'a.pdf', offset: 1, limit: 2000 })
+    expect(() => parseReadArgs({ file_path: '  ' }, 2000)).toThrow('file_path must be a non-empty string')
+    expect(() => parseReadArgs({ file_path: 'a.pdf', limit: 2001 }, 2000)).toThrow('limit must be less than or equal to 2000')
   })
 
-  it('formatConvertOutput footers cover capped, partial, and complete windows', () => {
+  it('formatReadOutput footers cover capped, partial, and complete windows', () => {
     const base = { path: '/d.pdf', format: 'pdf' as const, offset: 1, totalLines: 2, lines: [{ number: 1, text: 'a' }] }
-    expect(formatConvertOutput({ ...base, truncatedByBytes: true })).toContain('(Output capped. Showing lines 1-1. Use offset=2 to continue.)')
-    expect(formatConvertOutput({ ...base, truncatedByBytes: false })).toContain('(Showing lines 1-1 of 2. Use offset=2 to continue.)')
-    expect(formatConvertOutput({ ...base, totalLines: 1, truncatedByBytes: false })).toContain('(End of document - total 1 lines)')
-    expect(formatConvertOutput({ ...base, lines: [], offset: 5, totalLines: 2, truncatedByBytes: false })).toContain('(End of document - total 2 lines)')
+    expect(formatReadOutput({ ...base, truncatedByBytes: true })).toContain('(Output capped. Showing lines 1-1. Use offset=2 to continue.)')
+    expect(formatReadOutput({ ...base, truncatedByBytes: false })).toContain('(Showing lines 1-1 of 2. Use offset=2 to continue.)')
+    expect(formatReadOutput({ ...base, totalLines: 1, truncatedByBytes: false })).toContain('(End of document - total 1 lines)')
+    expect(formatReadOutput({ ...base, lines: [], offset: 5, totalLines: 2, truncatedByBytes: false })).toContain('(End of document - total 2 lines)')
   })
 })

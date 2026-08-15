@@ -1,6 +1,6 @@
-# @jiaoqsh/dsh-document
+# dsh-document
 
-A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin bundle that gives the model a `convert_document` tool: Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, and PDF files become line-numbered Markdown the model can page through with `offset`/`limit`.
+A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin bundle (`@jiaoqsh/dsh-document`) that gives the model a `read_document` tool: Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, and PDF files are converted to line-numbered Markdown the model can page through with `offset`/`limit`.
 
 Conversion runs locally through [`@firecrawl/anydoc`](https://github.com/firecrawl/anydoc) (Rust core, Node bindings, MIT): no API key, no network, no external binaries. Files are read through the harness `ctx.fs` seam, so whatever filesystem provider and sandbox policy a deployment mounts applies unchanged.
 
@@ -70,7 +70,7 @@ Every value must be a positive integer; anything else fails the plugin load with
 
 ## The tool
 
-`convert_document(file_path, offset?, limit?)`
+`read_document(file_path, offset?, limit?)`
 
 - `file_path` — resolved by the filesystem backend; relative paths resolve against the calling session's workspace.
 - `offset` — 1-based first line of the converted Markdown (default 1).
@@ -103,14 +103,14 @@ Failures are tool errors in model terms: unsupported extension (pointing at `rea
 
 ## Model Experience
 
-### System prompt section `tool:convert_document`
+### System prompt section `tool:read_document`
 
 #### What the model sees
 
 One fixed sentence, order 100 beside the shipped `tool:read` guidance:
 
 ```markdown
-Use the convert_document tool — not read or shell commands — to inspect PDF, Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, and CSV files. It returns the document as line-numbered Markdown; use offset and limit to continue reading long documents.
+Use the read_document tool — not read or shell commands — to inspect PDF, Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, and CSV files. It returns the document converted to line-numbered Markdown; use offset and limit to continue reading long documents.
 ```
 
 #### Token effect

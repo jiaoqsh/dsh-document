@@ -1,7 +1,7 @@
 /**
- * The model-facing `convert_document` tool: resolve a path through `ctx.fs`,
- * read the bytes under the input cap, convert to Markdown, and return one
- * line-numbered window.
+ * The model-facing `read_document` tool: resolve a path through `ctx.fs`,
+ * read the bytes under the input cap, convert them to Markdown, and return
+ * one line-numbered window.
  * @module @jiaoqsh/dsh-document/tool
  */
 
@@ -20,7 +20,7 @@ import {
 import { windowLines, type WindowLine } from './window.ts'
 
 /** Deployment bounds after defaulting (see `Config` in index.ts). */
-export interface ConvertDocumentCaps {
+export interface ReadDocumentCaps {
   /** Inclusive byte cap on the source file; larger files are refused before conversion. */
   maxInputBytes: number
   /** Default and maximum number of lines returned by one call. */
@@ -32,7 +32,7 @@ export interface ConvertDocumentCaps {
 }
 
 /** Canonical value of one successful call. */
-export interface ConvertDocumentOutcome {
+export interface ReadDocumentOutcome {
   path: string
   format: DocumentFormat
   offset: number
@@ -42,7 +42,7 @@ export interface ConvertDocumentOutcome {
 }
 
 /** Validated arguments after defaulting. */
-interface ConvertInput {
+interface ReadInput {
   filePath: string
   offset: number
   limit: number
@@ -63,10 +63,10 @@ function parsePositiveInteger(value: number, name: string): number {
  * @param maxLimit - the deployment line cap: both the default `limit` and the largest accepted.
  * @returns validated input with `offset` defaulted to 1 and `limit` to `maxLimit`.
  */
-export function parseConvertArgs(
+export function parseReadArgs(
   args: { file_path: string; offset?: number; limit?: number },
   maxLimit: number,
-): ConvertInput {
+): ReadInput {
   if (args.file_path.trim().length === 0) throw new Error('file_path must be a non-empty string')
   const offset = args.offset === undefined ? 1 : parsePositiveInteger(args.offset, 'offset')
   const limit = args.limit === undefined ? maxLimit : parsePositiveInteger(args.limit, 'limit')
@@ -80,7 +80,7 @@ export function parseConvertArgs(
  * @param outcome - the canonical value.
  * @returns the rendered text.
  */
-export function formatConvertOutput(outcome: ConvertDocumentOutcome): string {
+export function formatReadOutput(outcome: ReadDocumentOutcome): string {
   const endLine = outcome.lines.at(-1)?.number ?? Math.max(0, outcome.offset - 1)
   let footer: string
   if (outcome.truncatedByBytes) {
@@ -100,42 +100,42 @@ export function formatConvertOutput(outcome: ConvertDocumentOutcome): string {
 function describeFailure(displayPath: string, error: DocumentConversionError): string {
   switch (error.code) {
     case 'encrypted':
-      return `cannot convert "${displayPath}": the document is encrypted; supply a decrypted copy`
+      return `cannot read "${displayPath}": the document is encrypted; supply a decrypted copy`
     case 'unsupported':
-      return `cannot convert "${displayPath}": ${error.message}. If this is a scanned or image-only PDF, its pages need OCR, which this tool does not perform`
+      return `cannot read "${displayPath}": ${error.message}. If this is a scanned or image-only PDF, its pages need OCR, which this tool does not perform`
     case 'empty':
-      return `cannot convert "${displayPath}": ${error.message}. A scanned or image-only document needs OCR, which this tool does not perform`
+      return `cannot read "${displayPath}": ${error.message}. A scanned or image-only document needs OCR, which this tool does not perform`
     case 'malformed':
     case 'missingPart':
-      return `cannot convert "${displayPath}": the file is damaged or incomplete (${error.message})`
+      return `cannot read "${displayPath}": the file is damaged or incomplete (${error.message})`
     case 'resourceLimit':
-      return `cannot convert "${displayPath}": the document exceeds the converter's internal safety limits (${error.message})`
+      return `cannot read "${displayPath}": the document exceeds the converter's internal safety limits (${error.message})`
     case 'io':
     case 'unknown':
-      return `cannot convert "${displayPath}": ${error.message}`
+      return `cannot read "${displayPath}": ${error.message}`
   }
 }
 
 /**
- * Register the `convert_document` tool and its system-prompt guidance.
+ * Register the `read_document` tool and its system-prompt guidance.
  * @param ctx - the plugin context; registrations are effects scoped to it.
  * @param converter - the engine that maps extensions to formats and converts bytes.
  * @param caps - resolved deployment bounds.
  */
-export function applyConvertDocumentTool(
+export function applyReadDocumentTool(
   ctx: Context,
   converter: DocumentConverter,
-  caps: ConvertDocumentCaps,
+  caps: ReadDocumentCaps,
 ): void {
   ctx.systemPrompt.section({
-    name: 'tool:convert_document',
+    name: 'tool:read_document',
     order: 100,
-    text: `Use the convert_document tool — not read or shell commands — to inspect PDF, Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, and CSV files. It returns the document as line-numbered Markdown; use offset and limit to continue reading long documents.`,
+    text: `Use the read_document tool — not read or shell commands — to inspect PDF, Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, and CSV files. It returns the document converted to line-numbered Markdown; use offset and limit to continue reading long documents.`,
   })
 
   ctx.tools.register(defineTool({
-    name: 'convert_document',
-    description: `Convert a document file to Markdown and return it as line-numbered text. Supported: ${EXTENSION_LIST}. Returns text only and writes no files. Scanned or image-only PDFs are not OCRed. For plain text or source files use read; for images use read_image.`,
+    name: 'read_document',
+    description: `Read a document file as Markdown: PDF, Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, and CSV files are converted to line-numbered Markdown text. Supported: ${EXTENSION_LIST}. Returns text only and writes no files. Scanned or image-only PDFs are not OCRed. For plain text or source files use read; for images use read_image.`,
     parameters: {
       file_path: { type: 'string', required: true, description: 'Path to the document, resolved by the filesystem backend; relative paths resolve against the session workspace.' },
       offset: { type: 'number', description: '1-based first line of the converted Markdown to return. Defaults to 1.' },
@@ -165,16 +165,16 @@ export function applyConvertDocumentTool(
           truncatedByBytes: { type: 'boolean', required: true },
         },
       },
-      render: (_args, value) => [{ type: 'text', text: formatConvertOutput(value as ConvertDocumentOutcome) }],
+      render: (_args, value) => [{ type: 'text', text: formatReadOutput(value as ReadDocumentOutcome) }],
     },
     // Read-only: safe beside other tool calls in the same step.
     isConcurrencySafe: () => true,
-    async execute(args, exec: ToolExecution): Promise<ConvertDocumentOutcome> {
-      const input = parseConvertArgs(args, caps.readLimit)
+    async execute(args, exec: ToolExecution): Promise<ReadDocumentOutcome> {
+      const input = parseReadArgs(args, caps.readLimit)
       const format = converter.formatOf(input.filePath)
       if (format === undefined) {
         throw new Error(
-          `cannot convert "${input.filePath}": unsupported extension. Supported: ${EXTENSION_LIST}. For plain text or source files use the read tool.`,
+          `cannot read "${input.filePath}": unsupported extension. Supported: ${EXTENSION_LIST}. For plain text or source files use the read tool.`,
         )
       }
 
@@ -186,8 +186,8 @@ export function applyConvertDocumentTool(
         signal: exec.signal,
       })
       const info = await ctx.fs.stat(target, exec.signal)
-      if (info === undefined) throw new Error(`cannot convert "${target.displayPath}": not found`)
-      if (info.type !== 'file') throw new Error(`cannot convert "${target.displayPath}": not a regular file`)
+      if (info === undefined) throw new Error(`cannot read "${target.displayPath}": not found`)
+      if (info.type !== 'file') throw new Error(`cannot read "${target.displayPath}": not a regular file`)
 
       // The provider enforces the input cap, so an oversized file never buffers.
       const bytes = await ctx.fs.readBytes(target, exec.signal, caps.maxInputBytes)
@@ -226,7 +226,7 @@ export function applyConvertDocumentTool(
         : offset !== undefined ? ` (from line ${offset})` : ''
       return {
         card: 'generic',
-        title: `Convert ${args.file_path} to Markdown${window}`,
+        title: `Read ${args.file_path} as Markdown${window}`,
         kind: 'read',
         locations: [{ path: args.file_path }],
       }
