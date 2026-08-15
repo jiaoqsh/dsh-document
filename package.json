@@ -1,0 +1,72 @@
+{
+  "name": "@jiaoqsh/dsh-document",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness bundle: the convert_document tool turns Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, and PDF files into Markdown for the model",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "document",
+    "pdf",
+    "docx",
+    "markdown",
+    "anydoc"
+  ],
+  "license": "MIT",
+  "author": "jiaoqsh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jiaoqsh/dsh-document.git"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepare": "tsdown",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-fs": ">=0.1.0-rc.5",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.0-rc.5",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.5"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@firecrawl/anydoc": "0.1.9"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-fs": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs-local": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "@types/node": "^22.20.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

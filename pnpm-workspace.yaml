@@ -1,0 +1,6 @@
+# pnpm 10+ blocks any dependency shipping an install script until it is
+# reviewed here. koffi is a dev-only transitive dependency of
+# @deepseek-ai/dsh-fs-local (used by the tests); it ships prebuilt binaries,
+# so its script is denied and install still succeeds.
+allowBuilds:
+  koffi: false

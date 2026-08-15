@@ -1,0 +1,11 @@
+# The layer this bundle contributes when a profile lists it. Config is
+# omitted so the plugin's schema defaults apply; override this row by id
+# in your profile's cordis.patch.yml to change any bound:
+#
+#   - id: document-tools
+#     name: '@jiaoqsh/dsh-document'
+#     config:
+#       maxInputBytes: 104857600
+- insert:
+    - id: document-tools
+      name: '@jiaoqsh/dsh-document'
