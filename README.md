@@ -12,11 +12,11 @@ Into an existing profile (`web`, `headless`, or your own):
 dsh plugin --profile web add github:jiaoqsh/dsh-document#<commit-sha>
 ```
 
-pnpm ≥ 10 refuses to run a git dependency's `prepare` script until you allow it; the first `add` fails and prints the exact key to copy into the profile's `pnpm-workspace.yaml`:
+pnpm ≥ 10 refuses to run a git dependency's `prepare` script until you allow it; the first `add` fails and prints the exact key to copy into the profile's `pnpm-workspace.yaml` (`$DSH_HOME/profiles/<name>/pnpm-workspace.yaml`). The key names the resolved tarball, so a bare package name does not match:
 
 ```yaml
 allowBuilds:
-  '@jiaoqsh/dsh-document': true
+  '@jiaoqsh/dsh-document@https://codeload.github.com/jiaoqsh/dsh-document/tar.gz/<commit-sha>': true
 ```
 
 Re-run the `add`. Allowing the build means executing this package's `prepare` (a `tsdown` transpile of `src/`) on your machine at install time; pin a commit so a later push cannot change what runs. A packed tarball (`pnpm pack` → `dsh plugin add ./jiaoqsh-dsh-document-<version>.tgz`) needs no allowance.
