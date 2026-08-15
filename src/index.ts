@@ -1,14 +1,17 @@
 /**
  * DeepSeek Harness plugin: the `read_document` tool. Word, PowerPoint,
  * Excel, OpenDocument, RTF, EPUB, CSV, and PDF files are read through the
- * `ctx.fs` seam, converted locally by `@firecrawl/anydoc`, and returned to
- * the model as line-numbered Markdown.
+ * `ctx.fs` seam, converted locally, and returned to the model as
+ * line-numbered Markdown. Office formats convert with `@firecrawl/anydoc`;
+ * PDFs convert with `@firecrawl/pdf-inspector` in a worker thread, with page
+ * selection and scanned-page facts.
  * @module @jiaoqsh/dsh-document
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
-import { anydocConverter } from './converter.ts'
+import { anydocConverter, routeConverters } from './converter.ts'
+import { pdfInspectorConverter } from './pdf-inspector.ts'
 import { applyReadDocumentTool } from './tool.ts'
 
 export {
@@ -16,8 +19,20 @@ export {
   DOCUMENT_FORMATS,
   DocumentConversionError,
   anydocConverter,
+  formatOf,
+  routeConverters,
 } from './converter.ts'
-export type { ConversionErrorCode, DocumentConverter, DocumentFormat } from './converter.ts'
+export type {
+  ConversionErrorCode,
+  ConvertRequest,
+  ConvertResult,
+  DocumentConverter,
+  DocumentFormat,
+  PdfFacts,
+  PdfKind,
+} from './converter.ts'
+export { pdfInspectorConverter } from './pdf-inspector.ts'
+export type { PdfInspectorOptions } from './pdf-inspector.ts'
 export type { ReadDocumentCaps, ReadDocumentOutcome } from './tool.ts'
 
 export const name = 'document-tools'
@@ -31,10 +46,15 @@ export const DEFAULT_READ_LIMIT = 2000
 export const DEFAULT_MAX_LINE_LENGTH = 2000
 /** Default byte cap on returned line text per call. */
 export const DEFAULT_MAX_OUTPUT_BYTES = 50 * 1024
+/** Default cap on distinct pages one PDF `pages` selection may name. */
+export const DEFAULT_PDF_MAX_PAGES = 100
+
+/** PDF Markdown profiles the engine offers. */
+export type PdfProfile = 'fidelity' | 'compact'
 
 /**
- * Deployment-owned bounds. Every field is optional on the input side because
- * the schema fills defaults; `apply` receives the resolved record.
+ * Deployment-owned bounds and choices. Every field is optional on the input
+ * side because the schema fills defaults; `apply` receives the resolved record.
  */
 export interface Config {
   /** Inclusive byte cap on the source file; larger files are refused before conversion. */
@@ -45,6 +65,10 @@ export interface Config {
   maxLineLength?: number
   /** Maximum bytes of line text returned by one call. */
   maxOutputBytes?: number
+  /** Maximum distinct pages one PDF `pages` selection may name. */
+  pdfMaxPages?: number
+  /** PDF Markdown profile: `fidelity` keeps source structure, `compact` spends fewer tokens. */
+  pdfProfile?: PdfProfile
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -52,6 +76,8 @@ export const Config: Schema<Config> = Schema.object({
   readLimit: Schema.number().default(DEFAULT_READ_LIMIT),
   maxLineLength: Schema.number().default(DEFAULT_MAX_LINE_LENGTH),
   maxOutputBytes: Schema.number().default(DEFAULT_MAX_OUTPUT_BYTES),
+  pdfMaxPages: Schema.number().default(DEFAULT_PDF_MAX_PAGES),
+  pdfProfile: Schema.union(['fidelity', 'compact']).default('fidelity'),
 })
 
 type ResolvedConfig = Required<Config>
@@ -63,7 +89,7 @@ function assertPositiveInteger(name: string, value: number): void {
 }
 
 /**
- * Register `read_document` over the anydoc engine.
+ * Register `read_document` over the anydoc and pdf-inspector engines.
  * @param ctx - context carrying the tool registry, filesystem seam, and system-prompt registry.
  * @param rawConfig - schema-validated bounds after defaulting.
  */
@@ -73,10 +99,16 @@ export function apply(ctx: Context, rawConfig: Config): void {
   assertPositiveInteger('readLimit', config.readLimit)
   assertPositiveInteger('maxLineLength', config.maxLineLength)
   assertPositiveInteger('maxOutputBytes', config.maxOutputBytes)
-  applyReadDocumentTool(ctx, anydocConverter(), {
+  assertPositiveInteger('pdfMaxPages', config.pdfMaxPages)
+  const converterFor = routeConverters([
+    pdfInspectorConverter({ profile: config.pdfProfile }),
+    anydocConverter(),
+  ])
+  applyReadDocumentTool(ctx, converterFor, {
     maxInputBytes: config.maxInputBytes,
     readLimit: config.readLimit,
     maxLineLength: config.maxLineLength,
     maxOutputBytes: config.maxOutputBytes,
+    pdfMaxPages: config.pdfMaxPages,
   })
 }

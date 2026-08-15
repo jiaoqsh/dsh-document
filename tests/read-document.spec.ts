@@ -5,7 +5,7 @@
  * loop uses.
  */
 
-import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,7 +16,9 @@ import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as DocumentTools from '../src/index.ts'
-import { anydocConverter } from '../src/converter.ts'
+import { DocumentConversionError, anydocConverter, formatOf, routeConverters } from '../src/converter.ts'
+import { parsePages } from '../src/pages.ts'
+import { formatPages, pdfInspectorConverter } from '../src/pdf-inspector.ts'
 import { formatReadOutput, parseReadArgs } from '../src/tool.ts'
 import { splitLines, windowLines } from '../src/window.ts'
 
@@ -97,22 +99,96 @@ describe('windowLines', () => {
   })
 })
 
-describe('anydoc converter', () => {
-  const converter = anydocConverter()
+const liveSignal = () => new AbortController().signal
+const fixture = (name: string) => new Uint8Array(readFileSync(join(FIXTURES, name)))
 
+describe('format routing', () => {
   it('maps extensions case-insensitively and rejects unknown ones', () => {
-    expect(converter.formatOf('/tmp/Report.PDF')).toBe('pdf')
-    expect(converter.formatOf('slides.pptm')).toBe('pptx')
-    expect(converter.formatOf('legacy.xls')).toBe('xlsx')
-    expect(converter.formatOf('notes.txt')).toBeUndefined()
-    expect(converter.formatOf('archive.tar.gz')).toBeUndefined()
+    expect(formatOf('/tmp/Report.PDF')).toBe('pdf')
+    expect(formatOf('slides.pptm')).toBe('pptx')
+    expect(formatOf('legacy.xls')).toBe('xlsx')
+    expect(formatOf('notes.txt')).toBeUndefined()
+    expect(formatOf('archive.tar.gz')).toBeUndefined()
   })
 
+  it('picks the first engine listing a format and fails loud otherwise', () => {
+    const pdf = pdfInspectorConverter({ profile: 'fidelity' })
+    const any = anydocConverter()
+    const route = routeConverters([pdf, any])
+    expect(route('pdf')).toBe(pdf)
+    expect(route('docx')).toBe(any)
+    expect(() => routeConverters([pdf])('docx')).toThrow('no engine converts docx')
+  })
+})
+
+describe('anydoc engine', () => {
+  const converter = anydocConverter()
+
   it('reports engine failures with a stable code', async () => {
-    await expect(converter.toMarkdown(new Uint8Array([1, 2, 3]), 'docx'))
+    await expect(converter.convert({ bytes: new Uint8Array([1, 2, 3]), format: 'docx', signal: liveSignal() }))
       .rejects.toMatchObject({ name: 'DocumentConversionError', code: expect.stringMatching(/malformed|missingPart|unsupported/) })
-    await expect(converter.toMarkdown(new Uint8Array(), 'csv'))
+    await expect(converter.convert({ bytes: new Uint8Array(), format: 'csv', signal: liveSignal() }))
       .rejects.toMatchObject({ code: 'empty' })
+  })
+})
+
+describe('pdf-inspector engine (worker thread)', () => {
+  const converter = pdfInspectorConverter({ profile: 'fidelity' })
+
+  it('converts every page with markers and reports page facts', async () => {
+    const result = await converter.convert({ bytes: fixture('pages.pdf'), format: 'pdf', signal: liveSignal() })
+    expect(result.pdf).toEqual({ pageCount: 5, kind: 'text', pagesNeedingOcr: [] })
+    expect(result.markdown.startsWith('<!-- Page 1 -->')).toBe(true)
+    expect(result.markdown.match(/<!-- Page \d+ -->/g)).toHaveLength(5)
+  })
+
+  it('converts only the selected pages', async () => {
+    const result = await converter.convert({ bytes: fixture('pages.pdf'), format: 'pdf', pages: [2, 4], signal: liveSignal() })
+    expect(result.pdf?.pages).toEqual([2, 4])
+    expect(result.markdown.match(/<!-- Page \d+ -->/g)).toEqual(['<!-- Page 2 -->', '<!-- Page 4 -->'])
+    expect(result.markdown).toContain('Line 63:')
+    expect(result.markdown).not.toContain('Line 1:')
+  })
+
+  it('names pages beyond the last page instead of returning nothing', async () => {
+    await expect(converter.convert({ bytes: fixture('pages.pdf'), format: 'pdf', pages: [4, 9, 10], signal: liveSignal() }))
+      .rejects.toMatchObject({ code: 'pageRange', message: 'the document has 5 pages; requested pages 9-10 do not exist' })
+  })
+
+  it('classifies an image-only PDF as needing OCR', async () => {
+    await expect(converter.convert({ bytes: fixture('scan.pdf'), format: 'pdf', signal: liveSignal() }))
+      .rejects.toMatchObject({ code: 'scanned', message: 'all 1 page contains no extractable text: this is a scanned PDF and needs OCR' })
+  })
+
+  it('maps engine messages to codes', async () => {
+    await expect(converter.convert({ bytes: fixture('broken.docx'), format: 'pdf', signal: liveSignal() }))
+      .rejects.toMatchObject({ code: 'malformed', message: expect.stringMatching(/^Not a PDF/) })
+  })
+
+  it('terminates the worker when the signal fires', async () => {
+    const controller = new AbortController()
+    const pending = converter.convert({ bytes: fixture('pages.pdf'), format: 'pdf', signal: controller.signal })
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ code: 'aborted' })
+    const preAborted = new AbortController()
+    preAborted.abort()
+    await expect(converter.convert({ bytes: fixture('pages.pdf'), format: 'pdf', signal: preAborted.signal }))
+      .rejects.toBeInstanceOf(DocumentConversionError)
+  })
+})
+
+describe('parsePages / formatPages', () => {
+  it('parses numbers and ranges into a sorted unique list', () => {
+    expect(parsePages('3, 1-2, 2', 100)).toEqual([1, 2, 3])
+    expect(formatPages([1, 2, 3, 7, 10, 11])).toBe('1-3, 7, 10-11')
+  })
+
+  it('rejects malformed, inverted, empty, and oversized selections', () => {
+    expect(() => parsePages('a', 100)).toThrow('got "a"')
+    expect(() => parsePages('5-2', 100)).toThrow('invalid range "5-2"')
+    expect(() => parsePages('0', 100)).toThrow('invalid range "0"')
+    expect(() => parsePages('1-200', 100)).toThrow('more than 100 pages')
+    expect(() => parsePages(' ', 100)).toThrow()
   })
 })
 
@@ -155,8 +231,29 @@ describe('read_document plugin', () => {
     expect(text(page2)).toContain('(Showing lines 9-10 of 87. Use offset=11 to continue.)')
     const pdf = await call(ctx, { file_path: 'sample.pdf' })
     expect(pdf.isError).toBe(false)
-    expect(text(pdf)).toContain('<format>pdf</format>')
+    expect(text(pdf)).toContain('<format>pdf</format>\n<pdf>1 page, text-based; all pages</pdf>')
     expect(text(pdf)).toContain('… [line truncated]')
+  })
+
+  it('reads selected PDF pages with markers and reports the page facts', async () => {
+    const { ctx } = await mount(workspace())
+    const result = await call(ctx, { file_path: 'pages.pdf', pages: '2,4', limit: 3 })
+    expect(result.isError).toBe(false)
+    expect(text(result)).toContain('<pdf>5 pages, text-based; showing pages 2, 4</pdf>\n<content>\n1: <!-- Page 2 -->')
+    expect(text(result)).toContain('(Showing lines 1-3 of ')
+    const beyond = await call(ctx, { file_path: 'pages.pdf', pages: '6' })
+    expect(text(beyond)).toContain('the document has 5 pages; requested page 6 does not exist')
+    const nonPdf = await call(ctx, { file_path: 'sample.docx', pages: '1' })
+    expect(text(nonPdf)).toContain('pages applies to PDF files only')
+    const bad = await call(ctx, { file_path: 'pages.pdf', pages: 'ii' })
+    expect(text(bad)).toContain('pages must be comma-separated page numbers or ranges')
+  })
+
+  it('tells the model a scanned PDF needs OCR', async () => {
+    const { ctx } = await mount(workspace())
+    const result = await call(ctx, { file_path: 'scan.pdf' })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toBe('Error: cannot read "' + join(roots.at(-1)!, 'scan.pdf') + '": all 1 page contains no extractable text: this is a scanned PDF and needs OCR, which this tool does not perform')
   })
 
   it('resolves relative paths against the calling session workspace', async () => {
@@ -212,6 +309,8 @@ describe('read_document plugin', () => {
     await expect(ctx.plugin(DocumentTools, { readLimit: 0 })).rejects.toThrow('readLimit must be a positive integer')
     await expect(ctx.plugin(DocumentTools, { maxInputBytes: 1.5 })).rejects.toThrow('maxInputBytes must be a positive integer')
     await expect(ctx.plugin(DocumentTools, { maxOutputBytes: 'big' as never })).rejects.toThrow()
+    await expect(ctx.plugin(DocumentTools, { pdfMaxPages: 0 })).rejects.toThrow('pdfMaxPages must be a positive integer')
+    await expect(ctx.plugin(DocumentTools, { pdfProfile: 'tiny' as never })).rejects.toThrow()
   })
 
   it('unregisters the tool and prompt section when disposed (HMR safety)', async () => {
@@ -225,9 +324,11 @@ describe('read_document plugin', () => {
 
 describe('pure helpers', () => {
   it('parseReadArgs defaults and validates', () => {
-    expect(parseReadArgs({ file_path: 'a.pdf' }, 2000)).toEqual({ filePath: 'a.pdf', offset: 1, limit: 2000 })
-    expect(() => parseReadArgs({ file_path: '  ' }, 2000)).toThrow('file_path must be a non-empty string')
-    expect(() => parseReadArgs({ file_path: 'a.pdf', limit: 2001 }, 2000)).toThrow('limit must be less than or equal to 2000')
+    const caps = { readLimit: 2000, pdfMaxPages: 100 }
+    expect(parseReadArgs({ file_path: 'a.pdf' }, caps)).toEqual({ filePath: 'a.pdf', offset: 1, limit: 2000 })
+    expect(parseReadArgs({ file_path: 'a.pdf', pages: '2-3' }, caps)).toEqual({ filePath: 'a.pdf', offset: 1, limit: 2000, pages: [2, 3] })
+    expect(() => parseReadArgs({ file_path: '  ' }, caps)).toThrow('file_path must be a non-empty string')
+    expect(() => parseReadArgs({ file_path: 'a.pdf', limit: 2001 }, caps)).toThrow('limit must be less than or equal to 2000')
   })
 
   it('formatReadOutput footers cover capped, partial, and complete windows', () => {
@@ -236,5 +337,17 @@ describe('pure helpers', () => {
     expect(formatReadOutput({ ...base, truncatedByBytes: false })).toContain('(Showing lines 1-1 of 2. Use offset=2 to continue.)')
     expect(formatReadOutput({ ...base, totalLines: 1, truncatedByBytes: false })).toContain('(End of document - total 1 lines)')
     expect(formatReadOutput({ ...base, lines: [], offset: 5, totalLines: 2, truncatedByBytes: false })).toContain('(End of document - total 2 lines)')
+  })
+
+  it('formatReadOutput adds PDF facts and an OCR warning', () => {
+    const base = { path: '/d.pdf', format: 'pdf' as const, offset: 1, totalLines: 1, lines: [{ number: 1, text: 'a' }], truncatedByBytes: false }
+    expect(formatReadOutput({ ...base, pdf: { pageCount: 12, kind: 'mixed', pagesNeedingOcr: [3, 7, 8], pages: [1, 2, 3], title: 'Q3' } })).toContain([
+      '<path>/d.pdf</path>',
+      '<format>pdf</format>',
+      '<pdf>12 pages, mixed text and scanned pages; showing pages 1-3; title: Q3</pdf>',
+      '<warning>Pages 3, 7-8 contain no extractable text (scanned or image content); their content is missing below and would need OCR.</warning>',
+      '<content>',
+    ].join('\n'))
+    expect(formatReadOutput({ ...base, pdf: { pageCount: 1, kind: 'text', pagesNeedingOcr: [] } })).toContain('<pdf>1 page, text-based; all pages</pdf>\n<content>')
   })
 })

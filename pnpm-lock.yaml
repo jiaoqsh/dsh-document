@@ -14,6 +14,9 @@ importers:
       '@firecrawl/anydoc':
         specifier: 0.1.9
         version: 0.1.9
+      '@firecrawl/pdf-inspector-wasm':
+        specifier: 1.14.2
+        version: 1.14.2
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -245,6 +248,9 @@ packages:
     resolution: {integrity: sha512-WT4PiXAYWsTOk65pH6MKmM8yB27Vj5NyAnc29pVAZtJSf9DO5QBCDKOU+iFai4t11N1Qjs1QuCLrp9DMIeRITQ==}
     engines: {node: '>= 20'}
     hasBin: true
+
+  '@firecrawl/pdf-inspector-wasm@1.14.2':
+    resolution: {integrity: sha512-13BJv1r0rrGr7pMU9Vm8jmYHkDir+BHnf/0Uk3Eu4jyqPuVJp/3v1A5US0Sj4QzyRmR8Bkro/6aBdEArHowcnw==}
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
@@ -1152,6 +1158,8 @@ snapshots:
       '@firecrawl/anydoc-linux-x64-gnu': 0.1.9
       '@firecrawl/anydoc-linux-x64-musl': 0.1.9
       '@firecrawl/anydoc-win32-x64-msvc': 0.1.9
+
+  '@firecrawl/pdf-inspector-wasm@1.14.2': {}
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 

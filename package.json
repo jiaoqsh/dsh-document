@@ -55,7 +55,8 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@firecrawl/anydoc": "0.1.9"
+    "@firecrawl/anydoc": "0.1.9",
+    "@firecrawl/pdf-inspector-wasm": "1.14.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
