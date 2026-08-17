@@ -1,6 +1,6 @@
 {
   "name": "@jiaoqsh/dsh-document",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DeepSeek Harness bundle: the read_document tool reads Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, and PDF files as Markdown for the model",
   "keywords": [
     "deepseek-harness",
