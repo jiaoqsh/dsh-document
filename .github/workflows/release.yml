@@ -1,0 +1,51 @@
+name: Release
+
+# Publishes @jiaoqsh/dsh-document to npm and creates the GitHub release for a
+# version tag. Authentication is npm trusted publishing (OIDC): npmjs.com is
+# configured to trust this repository's `release.yml`, so no npm token is
+# stored here and provenance attestations are generated automatically.
+#
+# Release procedure: bump `version` in package.json on main, then push the
+# matching tag (`git tag v0.2.0 && git push origin v0.2.0`).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # gh release create
+  id-token: write   # npm trusted publishing (OIDC)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm >= 11.5.1; Node 22 bundles an older npm.
+      - run: npm install -g npm@latest && npm --version
+      - name: check tag against package.json
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version ($expected)" >&2
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: npm publish
+      - name: create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "dsh-document ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --notes "npm: https://www.npmjs.com/package/@jiaoqsh/dsh-document/v/${GITHUB_REF_NAME#v}"

@@ -1,3 +1,9 @@
+# pnpm 11 reads its settings here (not .npmrc).
+#
+# The dsh peer family (@deepseek-ai/*) is supplied by the dsh installation at
+# runtime; devDependencies pin it for tests, so peers are never auto-installed.
+autoInstallPeers: false
+
 # pnpm 10+ blocks any dependency shipping an install script until it is
 # reviewed here. koffi is a dev-only transitive dependency of
 # @deepseek-ai/dsh-fs-local (used by the tests); it ships prebuilt binaries,

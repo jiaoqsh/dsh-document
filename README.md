@@ -6,20 +6,28 @@ Conversion runs locally: office formats through [`@firecrawl/anydoc`](https://gi
 
 ## Install
 
-Into an existing profile (`web`, `headless`, or your own):
+Into an existing profile (`web`, `headless`, or your own), from npm:
+
+```sh
+dsh plugin --profile web add @jiaoqsh/dsh-document
+```
+
+The npm package ships built code, so nothing runs at install time. Releases are published from this repository's `release.yml` through npm trusted publishing and carry provenance attestations.
+
+### From GitHub instead
 
 ```sh
 dsh plugin --profile web add github:jiaoqsh/dsh-document#<commit-sha>
 ```
 
-pnpm ≥ 10 refuses to run a git dependency's `prepare` script until you allow it; the first `add` fails and prints the exact key to copy into the profile's `pnpm-workspace.yaml` (`$DSH_HOME/profiles/<name>/pnpm-workspace.yaml`). The key names the resolved tarball, so a bare package name does not match:
+A git install fetches sources, so pnpm ≥ 10 refuses to run the package's `prepare` (a `tsdown` transpile of `src/`) until you allow it: the first `add` fails and prints the exact key to copy into the profile's `pnpm-workspace.yaml` (`$DSH_HOME/profiles/<name>/pnpm-workspace.yaml`). The key names the resolved tarball, so a bare package name does not match:
 
 ```yaml
 allowBuilds:
   '@jiaoqsh/dsh-document@https://codeload.github.com/jiaoqsh/dsh-document/tar.gz/<commit-sha>': true
 ```
 
-Re-run the `add`. Allowing the build means executing this package's `prepare` (a `tsdown` transpile of `src/`) on your machine at install time; pin a commit so a later push cannot change what runs. A packed tarball (`pnpm pack` → `dsh plugin add ./jiaoqsh-dsh-document-<version>.tgz`) needs no allowance.
+Re-run the `add`. Allowing the build means executing this package's code on your machine at install time; pin a commit so a later push cannot change what runs.
 
 `dsh plugin` prints "missing peer" warnings for the `@deepseek-ai/*` packages: expected. The dsh installation supplies them at runtime; profiles deliberately do not install peers.
 
@@ -147,6 +155,8 @@ pnpm run typecheck
 pnpm test             # real Cordis Context + real registry + real local fs; no API key
 pnpm run build
 ```
+
+Release: bump `version` in `package.json` on `main`, then push the matching tag (`git tag v0.2.0 && git push origin v0.2.0`). `release.yml` checks the tag against the version, runs the checks, publishes to npm via trusted publishing, and creates the GitHub release with generated notes.
 
 Fixtures under `tests/fixtures/` were generated once with macOS `textutil` and `cupsfilter` (including a five-page PDF and an image-only PDF) and are committed so the suite runs anywhere. In source mode the PDF worker is spawned as `.ts` with `--experimental-strip-types`, so it stays free of TypeScript-only runtime syntax.
 

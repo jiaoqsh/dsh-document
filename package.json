@@ -13,6 +13,9 @@
     "anydoc"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "jiaoqsh",
   "repository": {
     "type": "git",
